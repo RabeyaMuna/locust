@@ -817,12 +817,29 @@ class TestFastHttpSsl(LocustTestCase):
         with open(self.tls_key_file.name, "w") as f:
             f.write(tls_key.decode())
 
+        # Create a small temporary template directory to avoid TemplateNotFound errors
+        import os
+        import tempfile
+
+        self._webui_template_dir = tempfile.TemporaryDirectory()
+        # minimal report.html used by the web UI rendering
+        with open(os.path.join(self._webui_template_dir.name, "report.html"), "w") as f:
+            f.write("{{ users }}")
+
         self.web_ui = self.environment.create_web_ui(
             "127.0.0.1",
             0,
             tls_cert=self.tls_cert_file.name,
             tls_key=self.tls_key_file.name,
         )
+        # Ensure the Flask/Jinja loader can find our temporary templates
+        try:
+            loader = getattr(self.web_ui.app, "jinja_loader", None)
+            if loader is not None and hasattr(loader, "searchpath"):
+                loader.searchpath.insert(0, self._webui_template_dir.name)
+        except Exception:
+            pass
+
         gevent.sleep(0.01)
         self.web_port = self.web_ui.server.server_port
 

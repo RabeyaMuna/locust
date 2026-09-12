@@ -1,4 +1,3 @@
-import os
 from itertools import chain
 
 from jinja2 import Environment as JinjaEnvironment
@@ -10,7 +9,11 @@ from .user.inspectuser import get_ratio
 from .util.date import format_duration, format_utc_timestamp
 
 PERCENTILES_FOR_HTML_REPORT = [0.50, 0.6, 0.7, 0.8, 0.9, 0.95, 0.99, 1.0]
-DEFAULT_BUILD_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "webui", "dist")
+# DEFAULT_BUILD_PATH intentionally left unset here so that render_template_from
+# can attempt to locate packaged resources (via importlib.resources) and fall
+# back to sensible file-system locations. Callers may still pass an explicit
+# build_path to render_template_from if desired.
+DEFAULT_BUILD_PATH = None
 
 
 def process_html_filename(options) -> None:
@@ -25,9 +28,76 @@ def process_html_filename(options) -> None:
 
 
 def render_template_from(file, build_path=DEFAULT_BUILD_PATH, **kwargs):
-    env = JinjaEnvironment(loader=FileSystemLoader(build_path))
-    template = env.get_template(file)
-    return template.render(**kwargs)
+    """Render Jinja template named `file`.
+
+    The function will try these locations in order:
+    1. The explicit build_path argument (if provided).
+    2. Packaged resources at package/webui/dist (using importlib.resources).
+    3. A fallback to a local webui/dist relative to this source file.
+
+    If none contain the requested template, a TemplateNotFound with a
+    helpful message will be raised.
+    """
+    try:
+        from importlib import resources as _resources
+    except Exception:
+        _resources = None
+    from jinja2 import TemplateNotFound
+
+    tried = []
+    paths_to_try = []
+
+    # 1) explicit build_path
+    if build_path:
+        paths_to_try.append(build_path)
+
+    # 2) packaged resources (if available)
+    if _resources is not None:
+        try:
+            pkg = __package__ or "locust"
+            resource = _resources.files(pkg).joinpath("webui", "dist")
+            if resource.exists() and resource.is_dir():
+                try:
+                    # Ensure we get a real file system path (works even if package is in a zip)
+                    with _resources.as_file(resource) as p:
+                        paths_to_try.append(str(p))
+                except Exception:
+                    # Fallback to the Traversable's string form
+                    paths_to_try.append(str(resource))
+        except Exception:
+            # Ignore failures locating package resources and continue to other fallbacks
+            pass
+
+    # 3) local relative fallback
+    try:
+        local = os.path.join(os.path.dirname(os.path.abspath(__file__)), "webui", "dist")
+        if local not in paths_to_try:
+            paths_to_try.append(local)
+    except Exception:
+        pass
+
+    last_exc = None
+    for p in paths_to_try:
+        tried.append(p)
+        try:
+            env = JinjaEnvironment(loader=FileSystemLoader(p))
+            template = env.get_template(file)
+            return template.render(**kwargs)
+        except TemplateNotFound as e:
+            last_exc = e
+            continue
+        except Exception as e:
+            # Keep trying other locations on unexpected errors but remember the last one
+            last_exc = e
+            continue
+
+    # If we reach here nothing worked
+    message = (
+        f"Template '{file}' not found. Tried the following locations: {tried}. "
+        "Make sure the webui/dist templates are installed in the package or pass a valid build_path."
+    )
+    # Raise TemplateNotFound for compatibility with callers expecting that exception
+    raise TemplateNotFound(message)
 
 
 def get_html_report(

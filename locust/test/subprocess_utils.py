@@ -26,7 +26,7 @@ class TestProcess:
         sigint_on_exit: bool = True,
         expect_timeout: int = 5,
         use_pty: bool = False,
-        join_timeout: int = 1,
+        join_timeout: int = 10,
     ):
         self.proc: subprocess.Popen[str]
         self._terminated = False

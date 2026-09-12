@@ -19,7 +19,7 @@ from typing import TYPE_CHECKING
 
 import gevent
 
-from . import log, stats
+from . import stats
 from .argument_parser import (
     get_locustfiles_locally,
     parse_locustfile_option,
@@ -277,8 +277,18 @@ def main():
                     for child_pid in children[:]:
                         while time.time() < start_time + 3:
                             try:
-                                _, child_status = os.waitpid(child_pid, os.WNOHANG)
-                                children.remove(child_pid)
+                                pid, child_status = os.waitpid(child_pid, os.WNOHANG)
+                                # os.waitpid returns (0, 0) if the child is still running
+                                if pid == 0:
+                                    # child still running; wait a bit and retry
+                                    time.sleep(0.1)
+                                    continue
+                                # child exited, remove and process status
+                                try:
+                                    children.remove(child_pid)
+                                except ValueError:
+                                    # already removed elsewhere
+                                    pass
                                 child_exit_code = os.waitstatus_to_exitcode(child_status)
                                 exit_code = max(exit_code, child_exit_code)
                             except OSError as e:
@@ -338,10 +348,11 @@ def main():
             )
 
     if os.name != "nt":
+        minimum_open_file_limit = 10000
+        soft_limit = None
         try:
             import resource
 
-            minimum_open_file_limit = 10000
             (soft_limit, hard_limit) = resource.getrlimit(resource.RLIMIT_NOFILE)
 
             if soft_limit < minimum_open_file_limit:
@@ -350,11 +361,17 @@ def main():
                 limits = minimum_open_file_limit, hard_limit
                 resource.setrlimit(resource.RLIMIT_NOFILE, limits)
         except BaseException:
-            logger.warning(
-                f"""System open file limit '{soft_limit} is below minimum setting '{minimum_open_file_limit}'.
-It's not high enough for load testing, and the OS didn't allow locust to increase it by itself.
-See https://github.com/locustio/locust/wiki/Installation#increasing-maximum-number-of-open-files-limit for more info."""
-            )
+            if soft_limit is None:
+                logger.warning(
+                    "Could not determine or modify system open file limit. It's not high enough for load testing, "
+                    "and the OS didn't allow locust to increase it by itself. See https://github.com/locustio/locust/wiki/Installation#increasing-maximum-number-of-open-files-limit for more info."
+                )
+            else:
+                logger.warning(
+                    f"System open file limit '{soft_limit}' is below minimum setting '{minimum_open_file_limit}'. "
+                    "It's not high enough for load testing, and the OS didn't allow locust to increase it by itself. "
+                    "See https://github.com/locustio/locust/wiki/Installation#increasing-maximum-number-of-open-files-limit for more info."
+                )
 
     # At least one locust file exists, or system will exit earlier
     locustfile_path = os.path.basename(locustfiles[0])
@@ -502,7 +519,7 @@ See https://github.com/locustio/locust/wiki/Installation#increasing-maximum-numb
     # Fire locust init event which can be used by end-users' code to run setup code that
     # need access to the Environment, Runner or WebUI.
     environment.events.init.fire(environment=environment, runner=runner, web_ui=web_ui)
-    if log.unhandled_greenlet_exception:
+    if getattr(logger, "unhandled_greenlet_exception", False):
         # treat exceptions in init handlers as fatal. They are already logged so no need to log anything more.
         sys.exit(1)
 
@@ -640,7 +657,7 @@ See https://github.com/locustio/locust/wiki/Installation#increasing-maximum-numb
             code = environment.process_exit_code
         elif len(runner.errors) or len(runner.exceptions):
             code = options.exit_code_on_error
-        elif log.unhandled_greenlet_exception:
+        elif getattr(logger, "unhandled_greenlet_exception", False):
             code = 2
         else:
             code = 0
@@ -671,8 +688,8 @@ See https://github.com/locustio/locust/wiki/Installation#increasing-maximum-numb
         shutdown()
 
     def save_html_report():
-        html_report = get_html_report(environment, show_download_link=False)
         process_html_filename(options)
+        html_report = get_html_report(environment, show_download_link=False)
         logger.info("writing html report to file: %s", options.html_file)
         with open(options.html_file, "w", encoding="utf-8") as file:
             file.write(html_report)

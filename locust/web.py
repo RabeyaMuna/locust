@@ -153,7 +153,7 @@ class WebUI:
         self.tls_key = tls_key
         self.userclass_picker_is_active = userclass_picker_is_active
         self.web_login = web_login
-        app = Flask(__name__)
+        app = Flask(__name__, template_folder=build_path or DEFAULT_BUILD_PATH)
         CORS(app)
         self.app = app
         app.jinja_env.add_extension("jinja2.ext.do")
@@ -162,7 +162,6 @@ class WebUI:
         self._swarm_greenlet: gevent.Greenlet | None = None
         self.template_args = {}
         self.auth_args = {}
-        self.app.template_folder = build_path or DEFAULT_BUILD_PATH
         self.app.static_url_path = "/assets/"
 
         app_blueprint = Blueprint("locust", __name__, url_prefix=web_base_path)
@@ -182,9 +181,12 @@ class WebUI:
         def handle_exception(error):
             error_message = str(error)
             error_code = getattr(error, "code", 500)
+            # Use a safe attribute access for error.name since not all exceptions have it
+            error_name = getattr(error, "name", None)
+            error_desc = error_name if error_name is not None else error_message
             logger.log(
                 logging.DEBUG if error_code <= 404 else logging.ERROR,
-                f"UI got request for {request.method} {request.path}, but it resulted in a {error_code}: {error.name}",
+                f"UI got request for {request.method} {request.path}, but it resulted in a {error_code}: {error_desc}",
             )
             return make_response(error_message, error_code)
 
@@ -663,7 +665,7 @@ class WebUI:
         missing_host_warning = False
         if self.environment.host:
             host = self.environment.host
-        elif self.environment.runner.user_classes:
+        elif self.environment.runner and self.environment.runner.user_classes:
             all_hosts = {l.host for l in self.environment.runner.user_classes}
             if len(all_hosts) == 1:
                 host = list(all_hosts)[0]
@@ -685,12 +687,13 @@ class WebUI:
 
         options = self.environment.parsed_options
 
-        if is_distributed := isinstance(self.environment.runner, MasterRunner):
+        is_distributed = isinstance(self.environment.runner, MasterRunner)
+        if is_distributed:
             worker_count = self.environment.runner.worker_count
         else:
             worker_count = 0
 
-        request_stats = self.environment.runner.stats
+        request_stats = self.environment.runner.stats if self.environment.runner is not None else None
         extra_options = argument_parser.ui_extra_args_dict()
 
         available_user_classes = None
@@ -717,12 +720,14 @@ class WebUI:
 
         new_template_args = {
             "locustfile": self.environment.locustfile,
-            "state": self.environment.runner.state,
+            "state": getattr(self.environment.runner, "state", STATE_MISSING),
             "is_distributed": is_distributed,
-            "user_count": self.environment.runner.user_count,
+            "user_count": getattr(self.environment.runner, "user_count", 0),
             "version": version,
             "host": host if host else "",
-            "history": request_stats.history if request_stats.num_requests > 0 else [],
+            "history": (
+                request_stats.history if request_stats and getattr(request_stats, "num_requests", 0) > 0 else []
+            ),
             "override_host_warning": override_host_warning,
             "missing_host_warning": missing_host_warning,
             "num_users": options and options.num_users,

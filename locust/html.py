@@ -10,7 +10,18 @@ from .user.inspectuser import get_ratio
 from .util.date import format_duration, format_utc_timestamp
 
 PERCENTILES_FOR_HTML_REPORT = [0.50, 0.6, 0.7, 0.8, 0.9, 0.95, 0.99, 1.0]
-DEFAULT_BUILD_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "webui", "dist")
+# Prefer package resources for locating the built webui templates. If that fails, fall back to the
+# original filesystem-relative path so behavior remains backwards compatible when running from source.
+try:
+    import importlib.resources as _importlib_resources
+
+    try:
+        with _importlib_resources.as_file(_importlib_resources.files("locust.webui").joinpath("dist")) as _dist_path:
+            DEFAULT_BUILD_PATH = str(_dist_path)
+    except Exception:
+        DEFAULT_BUILD_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "webui", "dist")
+except Exception:
+    DEFAULT_BUILD_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "webui", "dist")
 
 
 def process_html_filename(options) -> None:
@@ -25,9 +36,42 @@ def process_html_filename(options) -> None:
 
 
 def render_template_from(file, build_path=DEFAULT_BUILD_PATH, **kwargs):
-    env = JinjaEnvironment(loader=FileSystemLoader(build_path))
-    template = env.get_template(file)
-    return template.render(**kwargs)
+    # Use filesystem loader when a valid build_path exists. Otherwise try to load templates from
+    # package resources (locust.webui/dist). Finally, fall back to the original behavior so that
+    # TemplateNotFound continues to surface if nothing is found.
+    loader = None
+    if build_path and os.path.isdir(build_path):
+        loader = FileSystemLoader(build_path)
+    else:
+        try:
+            import importlib.resources as _importlib_resources
+
+            _dist = _importlib_resources.files("locust.webui").joinpath("dist")
+            with _importlib_resources.as_file(_dist) as _dist_path:
+                if os.path.isdir(str(_dist_path)):
+                    loader = FileSystemLoader(str(_dist_path))
+        except Exception:
+            loader = None
+
+    env = JinjaEnvironment(loader=loader)
+    if loader is not None:
+        template = env.get_template(file)
+        return template.render(**kwargs)
+
+    # Fallback: try to read the template source from package resources and render from string
+    try:
+        import importlib.resources as _importlib_resources
+
+        template_path = _importlib_resources.files("locust.webui").joinpath("dist").joinpath(file)
+        with _importlib_resources.as_file(template_path) as tpath:
+            with open(tpath, encoding="utf-8") as f:
+                template_src = f.read()
+        return env.from_string(template_src).render(**kwargs)
+    except Exception:
+        # As a last resort, recreate the original environment which will raise TemplateNotFound if missing
+        env = JinjaEnvironment(loader=FileSystemLoader(build_path))
+        template = env.get_template(file)
+        return template.render(**kwargs)
 
 
 def get_html_report(

@@ -1218,10 +1218,12 @@ class TestWebUIAuth(LocustTestCase):
             def get_id(self):
                 return self.username
 
-        def load_user(id):
+        # request_loader expects a callable that accepts the request object.
+        def load_user_from_request(request):
+            # For the purposes of this test, always return a valid User instance.
             return User()
 
-        self.web_ui.login_manager.request_loader(load_user)
+        self.web_ui.login_manager.request_loader(load_user_from_request)
 
         response = requests.get("http://127.0.0.1:%i" % self.web_port)
         d = pq(response.content.decode("utf-8"))
@@ -1230,7 +1232,8 @@ class TestWebUIAuth(LocustTestCase):
         self.assertIn("templateArgs", str(d))
 
     def test_index_with_web_login_enabled_no_user(self):
-        def load_user():
+        # user_loader is expected to accept a user id and return a user or None.
+        def load_user(user_id):
             return None
 
         self.web_ui.login_manager.user_loader(load_user)

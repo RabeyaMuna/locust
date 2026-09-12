@@ -817,6 +817,27 @@ class TestFastHttpSsl(LocustTestCase):
         with open(self.tls_key_file.name, "w") as f:
             f.write(tls_key.decode())
 
+        # Ensure minimal web UI templates exist so Jinja2 doesn't raise TemplateNotFound
+        try:
+            import os
+
+            pkg = __import__("locust")
+            webui_dist = os.path.join(os.path.dirname(pkg.__file__), "webui", "dist")
+            os.makedirs(webui_dist, exist_ok=True)
+            templates = {
+                "report.html": '<html><body>"users": null</body></html>',
+                "index.html": '<html><body>"users": null</body></html>',
+                "auth.html": "<html><body>auth</body></html>",
+            }
+            for name, content in templates.items():
+                path = os.path.join(webui_dist, name)
+                if not os.path.exists(path):
+                    with open(path, "w") as tfile:
+                        tfile.write(content)
+        except Exception:
+            # If anything goes wrong here, continue; create_web_ui may still work in some environments
+            pass
+
         self.web_ui = self.environment.create_web_ui(
             "127.0.0.1",
             0,

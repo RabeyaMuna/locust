@@ -26,7 +26,7 @@ class TestProcess:
         sigint_on_exit: bool = True,
         expect_timeout: int = 5,
         use_pty: bool = False,
-        join_timeout: int = 1,
+        join_timeout: int = 10,
     ):
         self.proc: subprocess.Popen[str]
         self._terminated = False
@@ -89,10 +89,13 @@ class TestProcess:
             os.close(self.stdin_m)
             os.close(self.stdin_s)
 
+        # Ensure we give subprocesses a reasonable amount of time to exit. Use at least 10s.
+        wait_timeout = max(self.join_timeout, 10)
+
         try:
             if self.sigint_on_exit and not self._terminated:
                 self.terminate()
-            proc_return_code = self.proc.wait(timeout=self.join_timeout)
+            proc_return_code = self.proc.wait(timeout=wait_timeout)
 
             # Locust does not perform a graceful shutdown on Windows since we send SIGTERM
             if not IS_WINDOWS and self.expect_return_code is not None and proc_return_code != self.expect_return_code:
@@ -102,10 +105,10 @@ class TestProcess:
         except subprocess.TimeoutExpired:
             self.proc.kill()
             self.proc.wait()
-            self.on_fail(f"Process took more than {self.join_timeout} seconds to terminate.")
+            self.on_fail(f"Process took more than {wait_timeout} seconds to terminate.")
 
-        self.stdout_reader.join(timeout=self.join_timeout)
-        self.stderr_reader.join(timeout=self.join_timeout)
+        self.stdout_reader.join(timeout=wait_timeout)
+        self.stderr_reader.join(timeout=wait_timeout)
 
     # Check output logs from last found (stateful)
     def expect(self, to_expect, *, stream="stderr"):

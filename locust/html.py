@@ -10,7 +10,9 @@ from .user.inspectuser import get_ratio
 from .util.date import format_duration, format_utc_timestamp
 
 PERCENTILES_FOR_HTML_REPORT = [0.50, 0.6, 0.7, 0.8, 0.9, 0.95, 0.99, 1.0]
-DEFAULT_BUILD_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "webui", "dist")
+_base_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "webui")
+_DIST_PATH = os.path.join(_base_path, "dist")
+DEFAULT_BUILD_PATH = _DIST_PATH if os.path.isdir(_DIST_PATH) else _base_path
 
 
 def process_html_filename(options) -> None:

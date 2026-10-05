@@ -3,6 +3,7 @@ from itertools import chain
 
 from jinja2 import Environment as JinjaEnvironment
 from jinja2 import FileSystemLoader
+from jinja2 import TemplateNotFound
 
 from . import stats
 from .runners import STATE_STOPPED, STATE_STOPPING, MasterRunner
@@ -25,8 +26,20 @@ def process_html_filename(options) -> None:
 
 
 def render_template_from(file, build_path=DEFAULT_BUILD_PATH, **kwargs):
-    env = JinjaEnvironment(loader=FileSystemLoader(build_path))
-    template = env.get_template(file)
+    search_paths = [build_path]
+    fallback_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "webui")
+    if fallback_path not in search_paths:
+        search_paths.append(fallback_path)
+
+    env = JinjaEnvironment(loader=FileSystemLoader(search_paths))
+    try:
+        template = env.get_template(file)
+    except TemplateNotFound:
+        if build_path != fallback_path:
+            env = JinjaEnvironment(loader=FileSystemLoader(fallback_path))
+            template = env.get_template(file)
+        else:
+            raise
     return template.render(**kwargs)
 
 

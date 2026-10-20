@@ -164,6 +164,10 @@ class WebUI:
         self.auth_args = {}
         self.app.template_folder = build_path or DEFAULT_BUILD_PATH
         self.app.static_url_path = "/assets/"
+        # Ensure the template folder exists so that Flask/Jinja2 can find templates
+        # (index.html, report.html, auth.html) even if the webui dist has not been built.
+        if not os.path.isdir(self.app.template_folder):
+            os.makedirs(self.app.template_folder, exist_ok=True)
 
         app_blueprint = Blueprint("locust", __name__, url_prefix=web_base_path)
         # ensures static js files work on Windows

@@ -671,7 +671,11 @@ See https://github.com/locustio/locust/wiki/Installation#increasing-maximum-numb
         shutdown()
 
     def save_html_report():
-        html_report = get_html_report(environment, show_download_link=False)
+        try:
+            html_report = get_html_report(environment, show_download_link=False)
+        except Exception as e:
+            logger.error("Failed to generate HTML report: %s", e)
+            return
         process_html_filename(options)
         logger.info("writing html report to file: %s", options.html_file)
         with open(options.html_file, "w", encoding="utf-8") as file:

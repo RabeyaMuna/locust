@@ -26,7 +26,12 @@ def process_html_filename(options) -> None:
 
 def render_template_from(file, build_path=DEFAULT_BUILD_PATH, **kwargs):
     env = JinjaEnvironment(loader=FileSystemLoader(build_path))
-    template = env.get_template(file)
+    try:
+        template = env.get_template(file)
+    except TemplateNotFound:
+        fallback_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "webui", "src")
+        env = JinjaEnvironment(loader=FileSystemLoader(fallback_path))
+        template = env.get_template(file)
     return template.render(**kwargs)
 
 

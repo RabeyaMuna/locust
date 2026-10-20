@@ -185,6 +185,11 @@ def download_locustfile_from_url(url: str) -> str:
         sys.stderr.write(f"Failed to get locustfile from: {url}. Exception: {e}")
         sys.exit(1)
     else:
+        if response.status_code != 200:
+            sys.stderr.write(
+                f"Failed to get locustfile from: {url}. Got status code: {response.status_code}. Response: '{response.text[:100]}'"
+            )
+            sys.exit(1)
         try:
             # Check if response is valid python code
             ast.parse(response.text)

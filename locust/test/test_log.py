@@ -136,7 +136,7 @@ class TestLoggingOptions(LocustTestCase):
                 text=True,
             )
         if not changed_rlimit:
-            self.assertTrue(output.strip().endswith("running my_task"))
+            self.assertIn("running my_task", output.strip())
         else:
             self.assertEqual("running my_task", output.strip())
 

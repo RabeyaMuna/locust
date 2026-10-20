@@ -136,11 +136,11 @@ class LocustTomlConfigParser(configargparse.TomlConfigParser):
                         result[key] = str(value)
                 break
         if sectionDataNotFound:
-            print( type(config).__name__ )
-            if data:= config:
+            print(type(config).__name__)
+            if data := config:
                 for key, value in config.items():
-                    print( key, value )
-                    print( type(value).__name__ )
+                    print(key, value)
+                    print(type(value).__name__)
                     if isinstance(value, list):
                         result[key] = value
                     elif isinstance(value, dict):
@@ -221,7 +221,7 @@ def get_empty_argument_parser(add_help=True, default_config_files=DEFAULT_CONFIG
         default_config_files=default_config_files,
         config_file_parser_class=configargparse.CompositeConfigParser(
             [
-                LocustTomlConfigParser(['tool.locust']),# ['tool.locust' ]
+                LocustTomlConfigParser(["tool.locust"]),  # ["tool.locust"]
                 configargparse.DefaultConfigFileParser,
             ]
         ),
@@ -229,7 +229,6 @@ def get_empty_argument_parser(add_help=True, default_config_files=DEFAULT_CONFIG
         add_config_file_help=False,
         add_help=add_help,
         formatter_class=configargparse.RawDescriptionHelpFormatter,
-        usage=configargparse.SUPPRESS,
         description=textwrap.dedent(
             """
 Usage: locust [options] [UserClass ...]
@@ -621,6 +620,13 @@ def setup_parser_arguments(parser):
         help=configargparse.SUPPRESS,
         env_var="LOCUST_LEGACY_UI",
     )
+    web_ui_group.add_argument(
+        "--web-base-path",
+        type=str,
+        default="",
+        help="Base path for the web interface (e.g., '/locust'). Default is empty (root path).",
+        env_var="LOCUST_WEB_BASE_PATH",
+    )
 
     master_group = parser.add_argument_group(
         "Master options",
@@ -716,14 +722,6 @@ Typically ONLY these options (and --locustfile) need to be specified on workers,
         default=5557,
         help="Port to connect to on master node. Defaults to 5557.",
         env_var="LOCUST_MASTER_NODE_PORT",
-    )
-
-    web_ui_group.add_argument(
-        "--web-base-path",
-        type=str,
-        default="",
-        help="Base path for the web interface (e.g., '/locust'). Default is empty (root path).",
-        env_var="LOCUST_WEB_BASE_PATH",
     )
 
     tag_group = parser.add_argument_group(

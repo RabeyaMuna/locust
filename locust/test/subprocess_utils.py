@@ -106,6 +106,10 @@ class TestProcess:
 
         self.stdout_reader.join(timeout=self.join_timeout)
         self.stderr_reader.join(timeout=self.join_timeout)
+        if not self.stdout_reader.dead:
+            self.stdout_reader.kill()
+        if not self.stderr_reader.dead:
+            self.stderr_reader.kill()
 
     # Check output logs from last found (stateful)
     def expect(self, to_expect, *, stream="stderr"):

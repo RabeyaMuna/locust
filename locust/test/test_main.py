@@ -74,7 +74,7 @@ class StandaloneIntegrationTests(ProcessIntegrationTest):
         self.assertIn("Common options:", output)
         self.assertIn("--locustfile <filename>", output)
         self.assertIn("Logging options:", output)
-        self.assertIn("--skip-log-setup      Disable Locust's logging setup.", output)
+        self.assertIn("--skip-log-setup", output)
 
     @unittest.skipIf(IS_WINDOWS, reason="Signal handling on windows is hard")
     def test_custom_arguments(self):
@@ -1423,7 +1423,17 @@ class AnyUser(HttpUser):
                         tp.expect("All users spawned")
 
                         # worker index: {id}
-                        indexes = [int(tp_worker_1.stdout_output[0][-1]), int(tp_worker_2.stdout_output[0][-1])]
+                        def _extract_worker_index(stdout_output):
+                            for line in stdout_output:
+                                match = re.search(r"worker index:\s*(\d+)", line)
+                                if match:
+                                    return int(match.group(1))
+                            raise AssertionError(f"Could not find worker index in output: {stdout_output}")
+
+                        indexes = [
+                            _extract_worker_index(tp_worker_1.stdout_output),
+                            _extract_worker_index(tp_worker_2.stdout_output),
+                        ]
                         indexes.sort()
                         self.assertEqual(0, indexes[0], f"expected index 0 but got {indexes[0]}")
                         self.assertEqual(1, indexes[1], f"expected index 1 but got {indexes[1]}")

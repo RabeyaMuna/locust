@@ -8,6 +8,8 @@ from collections.abc import Callable
 
 import gevent
 
+logger = logging.getLogger(__name__)
+
 if os.name == "nt":
     import pywintypes
     from win32api import STD_INPUT_HANDLE
@@ -26,6 +28,9 @@ else:
 
 class InitError(Exception):
     pass
+
+
+POLLER_INIT_ERRORS = (InitError,) if os.name == "nt" else (InitError, termios.error)
 
 
 class UnixKeyPoller:
@@ -99,8 +104,8 @@ def input_listener(key_to_func_map: dict[str, Callable]):
     def input_listener_func():
         try:
             poller = get_poller()
-        except InitError as e:
-            logging.debug(e)
+        except POLLER_INIT_ERRORS as e:
+            logger.debug(e)
             return
 
         try:
@@ -112,7 +117,7 @@ def input_listener(key_to_func_map: dict[str, Callable]):
                 else:
                     gevent.sleep(0.2)
         except Exception as e:
-            logging.warning(f"Exception in keyboard input poller: {e}")
+            logger.warning(f"Exception in keyboard input poller: {e}")
         finally:
             poller.cleanup()
 

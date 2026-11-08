@@ -10,7 +10,6 @@ from unittest import mock
 
 import gevent
 
-from . import changed_rlimit
 from .testcases import LocustTestCase
 from .util import temporary_file
 
@@ -117,7 +116,7 @@ class TestLoggingOptions(LocustTestCase):
         """
             )
         ) as file_path:
-            output = subprocess.check_output(
+            result = subprocess.run(
                 [
                     "locust",
                     "-f",
@@ -131,14 +130,15 @@ class TestLoggingOptions(LocustTestCase):
                     "--headless",
                     "--skip-log-setup",
                 ],
-                stderr=subprocess.STDOUT,
+                capture_output=True,
+                check=True,
                 timeout=10,
                 text=True,
             )
-        if not changed_rlimit:
-            self.assertTrue(output.strip().endswith("running my_task"))
-        else:
-            self.assertEqual("running my_task", output.strip())
+        self.assertEqual("running my_task", result.stdout.strip())
+        self.assertNotIn("Starting Locust", result.stderr)
+        self.assertNotIn("Run time limit set", result.stderr)
+        self.assertNotIn("Shutting down", result.stderr)
 
     def test_log_to_file(self):
         with temporary_file(

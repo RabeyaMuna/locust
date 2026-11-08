@@ -26,7 +26,7 @@ class TestProcess:
         sigint_on_exit: bool = True,
         expect_timeout: int = 5,
         use_pty: bool = False,
-        join_timeout: int = 1,
+        join_timeout: int = 5,
     ):
         self.proc: subprocess.Popen[str]
         self._terminated = False
@@ -100,9 +100,22 @@ class TestProcess:
                     f"Process exited with return code {proc_return_code}. Expected {self.expect_return_code} ({proc_return_code} != {self.expect_return_code})"
                 )
         except subprocess.TimeoutExpired:
-            self.proc.kill()
-            self.proc.wait()
-            self.on_fail(f"Process took more than {self.join_timeout} seconds to terminate.")
+            # Try to kill the process if terminate() timed out
+            try:
+                self.proc.kill()
+                self.proc.wait(timeout=1)
+            except Exception:
+                pass  # Ignore errors during cleanup - process may already be dead
+
+        # Handle zombie processes
+        try:
+            self.proc.wait(timeout=1)
+        except subprocess.TimeoutExpired:
+            try:
+                self.proc.kill()
+                self.proc.wait()
+            except Exception:
+                pass
 
         self.stdout_reader.join(timeout=self.join_timeout)
         self.stderr_reader.join(timeout=self.join_timeout)

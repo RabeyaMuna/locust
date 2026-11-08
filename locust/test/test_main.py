@@ -13,12 +13,14 @@ from tempfile import TemporaryDirectory
 from unittest import TestCase
 
 import gevent
+import gevent.pywsgi
 import psutil
 import requests
 from pyquery import PyQuery as pq
 
 from .mock_locustfile import MOCK_LOCUSTFILE_CONTENT, mock_locustfile
 from .subprocess_utils import TestProcess
+from .testcases import app as locust_test_app
 from .util import IS_WINDOWS, get_free_tcp_port, patch_env, temporary_file, wait_for_server
 
 SHORT_SLEEP = 2 if sys.platform == "darwin" else 1  # macOS is slow on GH, give it some extra time
@@ -985,7 +987,7 @@ class StandaloneIntegrationTests(ProcessIntegrationTest):
 
     def test_error_when_locustfiles_directory_is_empty(self):
         with TemporaryDirectory() as temp_dir:
-            with TestProcess(f"locust -f {temp_dir}", expect_return_code=1) as tp:
+            with TestProcess(f"locust -f {temp_dir}", expect_return_code=1, sigint_on_exit=False) as tp:
                 tp.expect(f"Could not find any locustfiles in directory '{temp_dir}'")
 
     def test_error_when_no_tasks_match_tags(self):
@@ -1145,13 +1147,13 @@ class MyUser(HttpUser):
 import time
 
 def test_first(session):
-    resp = session.get("/")
+    resp = session.get("/ultra_fast")
     resp.raise_for_status()
     resp = session.get("/doesntexist")
     time.sleep(10)
 
 def test_second(fastsession):
-    resp = fastsession.get("/")
+    resp = fastsession.get("/ultra_fast")
     resp.raise_for_status()
     resp = fastsession.get("/doesntexist")
     time.sleep(10)
@@ -1164,18 +1166,23 @@ def test_xxcrash(session):
         output_filepath = f"{output_base}.json"
         if os.path.exists(output_filepath):
             os.remove(output_filepath)
-        with mock_locustfile(content=LOCUSTFILE_CONTENT) as mocked:
-            with TestProcess(
-                f"locust -f {mocked.file_path} -H https://www.locust.cloud --headless -u 2 -r 10 -t 3 --exit-code-on-error 0",
-            ) as tp:
-                tp.expect(
-                    "/                                                                                  2     0(0.00%)",
-                )
-                tp.expect(
-                    "/doesntexist                                                                       2   2(100.00%)"
-                )
-                tp.not_expect_any("Traceback")
-                assert tp.proc.wait(3) == 0
+        web_server = gevent.pywsgi.WSGIServer(("127.0.0.1", 0), locust_test_app, log=None)
+        web_server.start()
+        try:
+            with mock_locustfile(content=LOCUSTFILE_CONTENT) as mocked:
+                with TestProcess(
+                    f"locust -f {mocked.file_path} -H http://127.0.0.1:{web_server.server_port} --headless -u 2 -r 10 -t 3 --exit-code-on-error 0",
+                ) as tp:
+                    tp.expect(
+                        "/ultra_fast                                                                        2     0(0.00%)",
+                    )
+                    tp.expect(
+                        "/doesntexist                                                                       2   2(100.00%)"
+                    )
+                    tp.not_expect_any("Traceback")
+                    assert tp.proc.wait(3) == 0
+        finally:
+            web_server.stop()
 
 
 class DistributedIntegrationTests(ProcessIntegrationTest):

@@ -31,4 +31,8 @@ yarn-error.log
 .DS_Store
 .python-version
 locust/webui/dist/**
-.coverage*
+.coverage*# Shell redirection artifacts
+=[0-9]*
+>[0-9]*
+*.tmp
+*.log

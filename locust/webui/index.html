@@ -13,7 +13,7 @@
     <div id="root"></div>
 
     <script>
-      window.templateArgs = {{ template_args|tojson }}
+      window.templateArgs = {{ template_args|tojson if template_args else {} }}
     </script>
     <script type="module" src="./src/index.tsx"></script>
   </body>

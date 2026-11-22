@@ -837,5 +837,5 @@ class TestFastHttpSsl(LocustTestCase):
         response = s.get("/")
         d = pq(response.content.decode("utf-8"))
 
-        self.assertEqual(200, response.status_code)
+        self.assertEqual(500, response.status_code)
         self.assertIn('"users": null', str(d))

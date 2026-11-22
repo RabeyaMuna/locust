@@ -181,24 +181,26 @@ def download_locustfile_from_url(url: str) -> str:
     """
     try:
         response = requests.get(url)
+        response.raise_for_status()
     except requests.exceptions.RequestException as e:
         sys.stderr.write(f"Failed to get locustfile from: {url}. Exception: {e}")
         sys.exit(1)
-    else:
-        try:
-            # Check if response is valid python code
-            ast.parse(response.text)
-        except SyntaxError:
-            sys.stderr.write(
-                f"Failed to get locustfile from: {url}. Response was not valid python code: '{response.text[:100]}'"
-            )
-            sys.exit(1)
+    
+    try:
+        # Check if response is valid python code
+        ast.parse(response.text)
+    except SyntaxError:
+        sys.stderr.write(
+            f"Failed to get locustfile from: {url}. Response was not valid python code: '{response.text[:100]}'"
+        )
+        sys.exit(1)
 
-    with open(os.path.join(tempfile.gettempdir(), urlparse(url).path.split("/")[-1]), "w") as locustfile:
+    temp_file = os.path.join(tempfile.gettempdir(), urlparse(url).path.split("/")[-1])
+    with open(temp_file, "w") as locustfile:
         locustfile.write(response.text)
 
-    atexit.register(exit_handler, locustfile.name)
-    return locustfile.name
+    atexit.register(exit_handler, temp_file)
+    return temp_file
 
 
 def get_empty_argument_parser(add_help=True, default_config_files=DEFAULT_CONFIG_FILES) -> LocustArgumentParser:
